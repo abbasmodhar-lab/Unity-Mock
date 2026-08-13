@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en" data-auto-mock-unified="1" data-auto-mock-twin="1" data-theme="light" data-theme-mode="automatic">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Unity Desk — Unified Mock</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"/>
+<style>
+  :root, html[data-theme="light"] {
+    --font-stack: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif;
+    --text-base: 14px; --text-color: #16191f; --text-muted: #5f6877; --bg-color: #f7f8fb;
+    --surface-gray-1: #f2f4f8; --surface-gray-2: #e9ecf2; --primary: #55748f; --primary-color: #55748f;
+    --border-color: #dce1ea; --icon-stroke: #434b57; --card-bg: #ffffff; --control-bg: #f3f6fa;
+    --navbar-bg: #ffffff; --fg-color: #ffffff; --uu-text: #16191f; --uu-border: #dce1ea;
+    --uu-surface-muted: #e9ecf2; --uu-surface-hover: #f2f4f8;
+  }
+  html[data-theme="dark"] {
+    --text-color: #eef1f6; --text-muted: #bac3d1; --bg-color: #16181d; --surface-gray-1: #1d2027;
+    --surface-gray-2: #252932; --primary: #55748f; --primary-color: #b6c5d1; --border-color: #323743;
+    --icon-stroke: #bac3d1; --card-bg: #1d2027; --control-bg: #22262d; --navbar-bg: #000000;
+    --fg-color: #1d2027; --uu-text: #eef1f6; --uu-border: #323743; --uu-surface-muted: #252932;
+    --uu-surface-hover: #252932;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-color, #fff);
+    font-family: var(--font-stack);
+    color: var(--text-color);
+  }
+  #desk-host {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-color, #fff);
+  }
+  #desk-frame, #desk-frame-b {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-color, #fff);
+  }
+  /* Instant dual-buffer swap — no opacity fade (fade reads as flicker). */
+  #desk-frame.is-hidden, #desk-frame-b.is-hidden {
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  #desk-frame.is-active, #desk-frame-b.is-active {
+    visibility: visible;
+    pointer-events: auto;
+    z-index: 1;
+  }
+  #nav-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2px;
+    width: 0;
+    z-index: 50;
+    background: var(--primary, #55748f);
+    opacity: 0;
+    transition: width 180ms ease, opacity 120ms ease;
+    pointer-events: none;
+  }
+  #nav-progress.is-on {
+    opacity: 1;
+    width: 70%;
+  }
+  #nav-progress.is-done {
+    width: 100%;
+    opacity: 0;
+  }
+  #boot-error {
+    display: none;
+    font: 14px/1.4 var(--font-stack), system-ui, sans-serif;
+    padding: 24px;
+    max-width: 560px;
+    color: var(--text-color);
+  }
+</style>
+</head>
+<body>
+<div id="desk-host">
+  <iframe id="desk-frame" class="is-active" title="Unity Desk"></iframe>
+  <iframe id="desk-frame-b" class="is-hidden" title="Unity Desk (buffer)" aria-hidden="true"></iframe>
+</div>
+<div id="nav-progress" aria-hidden="true"></div>
+<div id="boot-error"></div>
+<script>
+(function(){
+  var ALIASES = {"/desk": "apps", "/desk/": "apps", "/app": "apps", "/app/home": "apps", "/desk/sales-invoice": "sales-invoice", "/desk/sales-invoice/new": "sales-invoice-form", "/desk/customer": "customer", "/desk/customer/new": "customer-form", "/desk/item": "item", "/desk/item/new": "item-form", "/desk/payment-entry": "payment-entry", "/desk/payment-entry/new": "payment-entry-form", "/desk/journal-entry": "journal-entry", "/desk/company": "company", "/desk/employee": "employee", "/desk/purchase-invoice": "purchase-invoice", "/desk/supplier": "supplier", "/desk/account": "account", "/desk/invoicing": "invoicing", "/desk/query-report/general ledger": "general-ledger", "/desk/query-report/general%20ledger": "general-ledger", "/desk/dashboard-view/crm": "crm", "/desk/crm": "crm", "/desk/buying": "buying", "/desk/stock": "stock", "/desk/selling": "selling", "/desk/projects": "projects", "/desk/manufacturing": "manufacturing", "/desk/assets": "assets", "/desk/home": "apps", "apps": "apps", "/desk/apps": "apps", "/desk/hr": "hr", "hr": "hr", "/desk/hr-employees": "hr-employees", "hr-employees": "hr-employees", "/desk/hr-employee-lifecycle": "hr-employee-lifecycle", "hr-employee-lifecycle": "hr-employee-lifecycle", "/desk/hr-leave-applications": "hr-leave-applications", "hr-leave-applications": "hr-leave-applications", "/desk/hr-leave-approvals": "hr-leave-approvals", "hr-leave-approvals": "hr-leave-approvals", "/desk/hr-attendance": "hr-attendance", "hr-attendance": "hr-attendance", "/desk/hr-shifts-check-ins": "hr-shifts-check-ins", "hr-shifts-check-ins": "hr-shifts-check-ins", "/desk/hr-recruitment": "hr-recruitment", "hr-recruitment": "hr-recruitment", "/desk/hr-performance": "hr-performance", "hr-performance": "hr-performance", "/desk/hr-payroll": "hr-payroll", "hr-payroll": "hr-payroll", "/desk/hr-payroll-run": "hr-payroll-run", "hr-payroll-run": "hr-payroll-run", "/desk/hr-payroll-register": "hr-payroll-register", "hr-payroll-register": "hr-payroll-register", "/desk/hr-my-hr": "hr-my-hr", "hr-my-hr": "hr-my-hr"};
+  var LIST_FORM = {"sales-invoice": "sales-invoice-form", "sales-invoice-list": "sales-invoice-form", "customer": "customer-form", "item": "item-form", "payment-entry": "payment-entry-form"};
+  var ROUTE_NAMES = ["apps", "hr", "hr-employees", "hr-employee-lifecycle", "hr-leave-applications", "hr-leave-approvals", "hr-attendance", "hr-shifts-check-ins", "hr-recruitment", "hr-performance", "hr-payroll", "hr-payroll-run", "hr-payroll-register", "hr-my-hr"];
+  var DESK_PATHS = {"apps": "/desk", "hr": "/desk/hr", "hr-employees": "/desk/hr-employees", "hr-employee-lifecycle": "/desk/hr-employee-lifecycle", "hr-leave-applications": "/desk/hr-leave-applications", "hr-leave-approvals": "/desk/hr-leave-approvals", "hr-attendance": "/desk/hr-attendance", "hr-shifts-check-ins": "/desk/hr-shifts-check-ins", "hr-recruitment": "/desk/hr-recruitment", "hr-performance": "/desk/hr-performance", "hr-payroll": "/desk/hr-payroll", "hr-payroll-run": "/desk/hr-payroll-run", "hr-payroll-register": "/desk/hr-payroll-register", "hr-my-hr": "/desk/hr-my-hr"};
+  var FILE_MAP = {"apps": "routes/apps.html", "hr": "routes/hr.html", "hr-employees": "routes/hr-employees.html", "hr-employee-lifecycle": "routes/hr-employee-lifecycle.html", "hr-leave-applications": "routes/hr-leave-applications.html", "hr-leave-approvals": "routes/hr-leave-approvals.html", "hr-attendance": "routes/hr-attendance.html", "hr-shifts-check-ins": "routes/hr-shifts-check-ins.html", "hr-recruitment": "routes/hr-recruitment.html", "hr-performance": "routes/hr-performance.html", "hr-payroll": "routes/hr-payroll.html", "hr-payroll-run": "routes/hr-payroll-run.html", "hr-payroll-register": "routes/hr-payroll-register.html", "hr-my-hr": "routes/hr-my-hr.html"};
+  var START = "hr";
+  // New-tab / close-last always land on Apps when the bundle includes it — never the
+  // production start_route (which is the published app, e.g. crm).
+  var APPS_ROUTE = FILE_MAP.apps ? 'apps' : START;
+  var TITLE_MAP = {
+    apps: 'Apps', crm: 'Dashboard', buying: 'Buying', selling: 'Selling', stock: 'Stock',
+    manufacturing: 'Manufacturing', projects: 'Projects', assets: 'Assets',
+    customer: 'Customer', item: 'Item', 'sales-invoice': 'Sales Invoice',
+    'payment-entry': 'Payment Entry', 'journal-entry': 'Journal Entry'
+  };
+  var frameA = document.getElementById('desk-frame');
+  var frameB = document.getElementById('desk-frame-b');
+  var activeFrame = frameA;
+  var bufferFrame = frameB;
+  var frameRoute = { a: null, b: null };
+  var bootErr = document.getElementById('boot-error');
+  var progress = document.getElementById('nav-progress');
+  var current = null;
+  var cache = {};
+  var loadToken = 0;
+  var tabSeq = 1;
+  var tabs = [{ id: 'tab-home', route: START, title: 'Apps', home: true }];
+  var activeTabId = 'tab-home';
+  // Client-demo overlay: fill empty list tabs in the iframe only.
+  // Pure route files opened top-level (pixel gate) keep capture fidelity.
+  window.__UNIFIED_DEMO_DATA__ = true;
+  window.__UNIFIED_TABS__ = tabs;
+  window.__UNIFIED_THEME__ = 'system';
+  try {
+    window.__UNIFIED_THEME__ = localStorage.getItem('auto-mock-theme') || 'system';
+  } catch (e) {}
+
+  function resolveTheme(theme){
+    if (theme === 'dark' || theme === 'light') return theme;
+    try {
+      return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    } catch (e) { return 'light'; }
+  }
+
+  function applyThemeToFrame(fr, theme){
+    theme = theme || window.__UNIFIED_THEME__ || 'system';
+    var resolved = resolveTheme(theme);
+    try {
+      var doc = fr && fr.contentDocument;
+      if (doc && doc.documentElement) {
+        doc.documentElement.setAttribute('data-theme', resolved);
+        doc.documentElement.setAttribute('data-theme-mode', theme === 'system' ? 'automatic' : theme);
+      }
+      if (fr && fr.contentWindow && typeof fr.contentWindow.__AUTO_MOCK_APPLY_THEME__ === 'function') {
+        fr.contentWindow.__AUTO_MOCK_APPLY_THEME__(theme);
+      }
+    } catch (e) {}
+  }
+
+  function applyTheme(theme){
+    theme = theme || 'system';
+    window.__UNIFIED_THEME__ = theme;
+    try { localStorage.setItem('auto-mock-theme', theme); } catch (e) {}
+    var resolved = resolveTheme(theme);
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.setAttribute('data-theme-mode', theme === 'system' ? 'automatic' : theme);
+    applyThemeToFrame(activeFrame, theme);
+    applyThemeToFrame(bufferFrame, theme);
+  }
+  window.__UNIFIED_APPLY_THEME__ = applyTheme;
+  applyTheme(window.__UNIFIED_THEME__);
+
+  function setProgress(state){
+    if (!progress) return;
+    progress.classList.remove('is-on', 'is-done');
+    if (state === 'on') progress.classList.add('is-on');
+    else if (state === 'done') {
+      progress.classList.add('is-done');
+      setTimeout(function(){ progress.classList.remove('is-done'); progress.style.width = ''; }, 180);
+    }
+  }
+
+  function resolveName(name){
+    if (!name) return START;
+    if (FILE_MAP[name]) return name;
+    var lower = String(name).toLowerCase();
+    var slug = lower.replace(/&/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (FILE_MAP[slug]) return slug;
+    if (ALIASES[slug]) return ALIASES[slug];
+    if (ALIASES['/desk/' + slug]) return ALIASES['/desk/' + slug];
+    if (ALIASES[lower]) return ALIASES[lower];
+    if (ALIASES['/desk/' + lower]) return ALIASES['/desk/' + lower];
+    try {
+      var dec = decodeURIComponent(lower);
+      if (ALIASES[dec]) return ALIASES[dec];
+    } catch (e) {}
+    // Desk paths with query/hash (Credit Note filters, settings #tab)
+    if (lower.indexOf('/desk') === 0) {
+      var pathOnly = lower.split('?')[0].split('#')[0].replace(/\/+$/, '');
+      if (ALIASES[pathOnly]) return ALIASES[pathOnly];
+      try {
+        var decPath = decodeURIComponent(pathOnly);
+        if (ALIASES[decPath]) return ALIASES[decPath];
+      } catch (e2) {}
+    }
+    return null;
+  }
+
+  function titleFor(route, explicit){
+    if (explicit) return explicit;
+    if (TITLE_MAP[route]) return TITLE_MAP[route];
+    if (route === START || route === 'apps') return 'Apps';
+    return String(route || 'Tab').split('-').map(function(p){
+      return p ? p.charAt(0).toUpperCase() + p.slice(1) : p;
+    }).join(' ');
+  }
+
+  function loadHtml(route){
+    if (cache[route]) return Promise.resolve(cache[route]);
+    var rel = FILE_MAP[route];
+    if (!rel) return Promise.reject(new Error('no file for ' + route));
+    var url = new URL(rel, window.location.href).href;
+    return fetch(url).then(function(res){
+      if (!res.ok) throw new Error('fetch ' + url + ' -> ' + res.status);
+      return res.text();
+    }).then(function(html){
+      cache[route] = html;
+      return html;
+    });
+  }
+
+  function escHtml(s){
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function buildTabstripInnerHtml(){
+    var parts = [];
+    tabs.forEach(function(tab){
+      var cls = 'uu-tabstrip__tab' +
+        (tab.id === activeTabId ? ' uu-tabstrip__tab-active' : '') +
+        (tab.home ? ' uu-tabstrip__tab-home' : '');
+      var close = (tab.home && tabs.length === 1)
+        ? ''
+        : '<button type="button" class="uu-tabstrip__tab-close" title="Close tab" aria-label="Close tab">×</button>';
+      var title = escHtml(tab.title);
+      parts.push(
+        '<div class="' + cls + '" role="tab" aria-selected="' +
+        (tab.id === activeTabId ? 'true' : 'false') +
+        '" tabindex="0" data-tab-id="' + escHtml(tab.id) +
+        '" data-auto-mock-route="' + escHtml(tab.route) +
+        '" title="' + title +
+        '"><span class="uu-tabstrip__tab-label">' + title + '</span>' + close + '</div>'
+      );
+    });
+    parts.push(
+      '<button type="button" class="uu-tabstrip__new" title="New tab (Ctrl+Alt+T)" aria-label="New tab">+</button>'
+    );
+    return parts.join('');
+  }
+
+  function stampTabstripHtml(html){
+    if (!html || html.indexOf('uu-tabstrip__tabs') === -1) return html;
+    var marker = 'class="uu-tabstrip__tabs"';
+    var idx = html.indexOf(marker);
+    if (idx < 0) {
+      marker = "class='uu-tabstrip__tabs'";
+      idx = html.indexOf(marker);
+    }
+    if (idx < 0) return html;
+    var openStart = html.lastIndexOf('<', idx);
+    var openEnd = html.indexOf('>', idx);
+    if (openStart < 0 || openEnd < 0) return html;
+    openEnd += 1;
+    var i = openEnd;
+    var depth = 1;
+    while (i < html.length && depth > 0) {
+      var nextOpen = html.indexOf('<div', i);
+      var nextClose = html.indexOf('</div>', i);
+      if (nextClose < 0) break;
+      if (nextOpen >= 0 && nextOpen < nextClose) {
+        depth += 1;
+        i = nextOpen + 4;
+      } else {
+        depth -= 1;
+        if (depth === 0) {
+          return html.slice(0, openEnd) + buildTabstripInnerHtml() + html.slice(nextClose);
+        }
+        i = nextClose + 6;
+      }
+    }
+    return html;
+  }
+
+  function stampThemeOntoHtml(html){
+    // Rewrite baked capture theme before srcdoc so the first paint matches the host
+    // (avoids a light→dark flash when swapping buffers).
+    if (!html) return html;
+    var theme = window.__UNIFIED_THEME__ || 'system';
+    var resolved = resolveTheme(theme);
+    var mode = theme === 'system' ? 'automatic' : theme;
+    html = html.replace(
+      /(<html\b[^>]*\bdata-theme\s*=\s*)(["'])[^"']*\2/i,
+      '$1$2' + resolved + '$2'
+    );
+    if (!/\bdata-theme\s*=/i.test(html.slice(0, 800))) {
+      html = html.replace(/<html\b/i, '<html data-theme="' + resolved + '"');
+    }
+    if (/\bdata-theme-mode\s*=/i.test(html.slice(0, 1200))) {
+      html = html.replace(
+        /(<html\b[^>]*\bdata-theme-mode\s*=\s*)(["'])[^"']*\2/i,
+        '$1$2' + mode + '$2'
+      );
+    } else {
+      html = html.replace(/<html\b/i, '<html data-theme-mode="' + mode + '"');
+    }
+    return html;
+  }
+
+  function syncTabstrip(doc){
+    if (!doc) return false;
+    var list = doc.querySelector('.uu-tabstrip__tabs');
+    if (!list) return false;
+    var existing = [];
+    for (var c = 0; c < list.children.length; c++) {
+      if (list.children[c].classList && list.children[c].classList.contains('uu-tabstrip__tab')) {
+        existing.push(list.children[c]);
+      }
+    }
+    if (existing.length === tabs.length) {
+      var same = true;
+      for (var i = 0; i < tabs.length; i++) {
+        if (existing[i].getAttribute('data-tab-id') !== tabs[i].id) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        tabs.forEach(function(tab, idx){
+          var el = existing[idx];
+          el.className = 'uu-tabstrip__tab' +
+            (tab.id === activeTabId ? ' uu-tabstrip__tab-active' : '') +
+            (tab.home ? ' uu-tabstrip__tab-home' : '');
+          el.setAttribute('aria-selected', tab.id === activeTabId ? 'true' : 'false');
+          el.setAttribute('data-auto-mock-route', tab.route);
+          el.setAttribute('title', tab.title);
+          var lab = el.querySelector('.uu-tabstrip__tab-label');
+          if (lab) lab.textContent = tab.title;
+          var close = el.querySelector('.uu-tabstrip__tab-close');
+          var needClose = !(tab.home && tabs.length === 1);
+          if (needClose && !close) {
+            el.insertAdjacentHTML(
+              'beforeend',
+              '<button type="button" class="uu-tabstrip__tab-close" title="Close tab" aria-label="Close tab">×</button>'
+            );
+          } else if (!needClose && close) {
+            close.parentNode.removeChild(close);
+          }
+        });
+        if (!list.querySelector('.uu-tabstrip__new')) {
+          var plusKeep = doc.createElement('button');
+          plusKeep.type = 'button';
+          plusKeep.className = 'uu-tabstrip__new';
+          plusKeep.title = 'New tab (Ctrl+Alt+T)';
+          plusKeep.setAttribute('aria-label', 'New tab');
+          plusKeep.textContent = '+';
+          list.appendChild(plusKeep);
+        }
+        return true;
+      }
+    }
+    list.innerHTML = buildTabstripInnerHtml();
+    return true;
+  }
+
+  function frameKey(fr){
+    return fr === frameA ? 'a' : 'b';
+  }
+
+  function swapTo(nextFrame){
+    var prev = activeFrame;
+    activeFrame = nextFrame;
+    bufferFrame = prev;
+    activeFrame.classList.add('is-active');
+    activeFrame.classList.remove('is-hidden');
+    activeFrame.setAttribute('aria-hidden', 'false');
+    bufferFrame.classList.add('is-hidden');
+    bufferFrame.classList.remove('is-active');
+    bufferFrame.setAttribute('aria-hidden', 'true');
+  }
+
+  function paintFrame(fr, html, route, token){
+    return new Promise(function(resolve, reject){
+      var settled = false;
+      var stamped = stampThemeOntoHtml(stampTabstripHtml(html));
+      var wantsStrip = stamped.indexOf('uu-tabstrip__tabs') !== -1;
+      var finish = function(force){
+        if (settled || token !== loadToken) return;
+        try {
+          var doc = fr.contentDocument;
+          if (!(doc && doc.body && doc.body.children.length)) return;
+          var list = doc.querySelector('.uu-tabstrip__tabs');
+          if (wantsStrip && !list && !force) return;
+          if (list) syncTabstrip(doc);
+        } catch (e) {
+          if (!force) return;
+        }
+        settled = true;
+        frameRoute[frameKey(fr)] = route;
+        try { applyThemeToFrame(fr, window.__UNIFIED_THEME__ || 'system'); } catch (e) {}
+        resolve();
+      };
+      fr.onload = function(){ finish(false); };
+      try {
+        fr.removeAttribute('src');
+        fr.srcdoc = stamped;
+      } catch (err) {
+        reject(err);
+        return;
+      }
+      var tries = 0;
+      var poll = setInterval(function(){
+        tries += 1;
+        if (token !== loadToken) { clearInterval(poll); return; }
+        finish(false);
+        if (settled) { clearInterval(poll); return; }
+        if (tries > 80) {
+          clearInterval(poll);
+          finish(true);
+        }
+      }, 25);
+    });
+  }
+
+  function revealRoute(route){
+    current = route;
+    window.__UNIFIED_READY__ = true;
+    window.__UNIFIED_ROUTE__ = route;
+    window.__UNIFIED_PATH__ = DESK_PATHS[route] || '';
+    try { syncTabstrip(activeFrame.contentDocument); } catch (e) {}
+    try { applyThemeToFrame(activeFrame, window.__UNIFIED_THEME__ || 'system'); } catch (e) {}
+    setProgress('done');
+  }
+
+  function show(name, push, opts){
+    opts = opts || {};
+    var route = resolveName(name);
+    if (!route || !FILE_MAP[route]) {
+      console.warn('[auto-mock] missing route', name);
+      // Prefer Apps over start_route so a CRM-only bundle never paints CRM for unknown hashes.
+      route = FILE_MAP.apps ? 'apps' : ROUTE_NAMES[0];
+    }
+    var title = titleFor(route, opts.title);
+    if (opts.openInNewTab) {
+      var nt = { id: 'tab-' + (tabSeq++), route: route, title: title, home: route === START };
+      tabs.push(nt);
+      activeTabId = nt.id;
+    } else {
+      var active = tabs.find(function(t){ return t.id === activeTabId; });
+      if (!active) {
+        active = { id: 'tab-' + (tabSeq++), route: route, title: title, home: route === START };
+        tabs = [active];
+        activeTabId = active.id;
+      } else {
+        active.route = route;
+        active.title = title;
+        active.home = route === START;
+      }
+    }
+    window.__UNIFIED_ROUTE__ = route;
+    window.__UNIFIED_PATH__ = DESK_PATHS[route] || '';
+    window.__UNIFIED_TABS__ = tabs;
+    window.__UNIFIED_ACTIVE_TAB__ = activeTabId;
+    if (push) {
+      history.pushState({route: route, tabId: activeTabId}, '', '#' + route);
+    } else if (!location.hash || location.hash.slice(1) !== route) {
+      history.replaceState({route: route, tabId: activeTabId}, '', '#' + route);
+    }
+
+    // Update the visible strip in place so Dashboard → Lead never jumps via a foreign capture title.
+    try { syncTabstrip(activeFrame.contentDocument); } catch (e) {}
+
+    // Already showing this route — tabstrip only.
+    if (!opts.force && route === current && frameRoute[frameKey(activeFrame)] === route) {
+      revealRoute(route);
+      return;
+    }
+    // Other buffer already has this route mounted — instant swap (tab switch / back-nav).
+    if (!opts.force && frameRoute[frameKey(bufferFrame)] === route && bufferFrame.getAttribute('srcdoc')) {
+      try { applyThemeToFrame(bufferFrame, window.__UNIFIED_THEME__ || 'system'); } catch (e) {}
+      swapTo(bufferFrame);
+      revealRoute(route);
+      return;
+    }
+
+    var token = ++loadToken;
+    window.__UNIFIED_READY__ = false;
+    setProgress('on');
+    loadHtml(route).then(function(html){
+      if (token !== loadToken) return null;
+      bootErr.style.display = 'none';
+      var firstPaint = !activeFrame.getAttribute('srcdoc');
+      var loading = firstPaint ? activeFrame : bufferFrame;
+      return paintFrame(loading, html, route, token).then(function(){
+        if (token !== loadToken) return;
+        if (!firstPaint && loading !== activeFrame) swapTo(loading);
+        revealRoute(route);
+      });
+    }).catch(function(err){
+      if (token !== loadToken) return;
+      console.error(err);
+      setProgress('done');
+      activeFrame.style.display = 'none';
+      bootErr.style.display = 'block';
+      bootErr.innerHTML = '<strong>Desk mock needs HTTP.</strong><br/>Run <code>auto-mock serve-desk</code> then open <code>http://127.0.0.1:4186/desk.html</code>.<br/><pre>' + String(err) + '</pre>';
+    });
+  }
+
+  function activateTab(tabId){
+    var tab = tabs.find(function(t){ return t.id === tabId; });
+    if (!tab) return;
+    if (tab.id === activeTabId && tab.route === current) {
+      try { syncTabstrip(activeFrame.contentDocument); } catch (e) {}
+      return;
+    }
+    activeTabId = tab.id;
+    show(tab.route, true, { title: tab.title });
+  }
+
+  function closeTab(tabId){
+    if (tabs.length <= 1) {
+      tabs[0].route = APPS_ROUTE;
+      tabs[0].title = 'Apps';
+      tabs[0].home = true;
+      activeTabId = tabs[0].id;
+      show(APPS_ROUTE, true, { force: true });
+      return;
+    }
+    var idx = tabs.findIndex(function(t){ return t.id === tabId; });
+    if (idx < 0) idx = tabs.findIndex(function(t){ return t.id === activeTabId; });
+    if (idx < 0) return;
+    var closingActive = tabs[idx].id === activeTabId;
+    tabs.splice(idx, 1);
+    if (closingActive) {
+      var next = tabs[Math.max(0, idx - 1)];
+      activeTabId = next.id;
+      show(next.route, true, { title: next.title, force: true });
+    } else {
+      try { syncTabstrip(activeFrame.contentDocument); } catch (e) {}
+    }
+  }
+
+  window.addEventListener('message', function(ev){
+    var data = ev.data || {};
+    if (!data || data.source !== 'auto-mock-nav') return;
+    if (data.type === 'ready') {
+      // Ready from the active document only — buffer frames also boot interact.
+      try {
+        if (ev.source && activeFrame.contentWindow && ev.source !== activeFrame.contentWindow) return;
+      } catch (e) {}
+      var mounted = frameRoute[frameKey(activeFrame)];
+      // Ignore stale ready from a previous document while a newer route is mounted.
+      if (data.route && mounted && data.route !== mounted) return;
+      window.__UNIFIED_READY__ = true;
+      if (data.route && (!mounted || data.route === mounted)) {
+        window.__UNIFIED_ROUTE__ = data.route;
+      } else if (current) {
+        window.__UNIFIED_ROUTE__ = current;
+      }
+      try { syncTabstrip(activeFrame.contentDocument); } catch (e) {}
+      try { applyThemeToFrame(activeFrame, window.__UNIFIED_THEME__ || 'system'); } catch (e) {}
+      return;
+    }
+    if (data.type === 'set-theme') {
+      var nextTheme = data.theme || 'system';
+      if (nextTheme === window.__UNIFIED_THEME__) {
+        applyThemeToFrame(activeFrame, nextTheme);
+        applyThemeToFrame(bufferFrame, nextTheme);
+        return;
+      }
+      applyTheme(nextTheme);
+      return;
+    }
+    if (data.type === 'back') { history.back(); return; }
+    if (data.type === 'forward') { history.forward(); return; }
+    if (data.type === 'new-tab') {
+      show(APPS_ROUTE, true, { openInNewTab: true, title: 'Apps' });
+      return;
+    }
+    if (data.type === 'close-tab') {
+      closeTab(data.tabId || activeTabId);
+      return;
+    }
+    if (data.type === 'switch-tab') {
+      if (data.tabId) activateTab(data.tabId);
+      else if (data.route) show(data.route, true, { title: data.title });
+      return;
+    }
+    if (data.type === 'navigate' && data.route) {
+      var target = resolveName(data.route);
+      if (!target && data.path) target = resolveName(data.path);
+      if (LIST_FORM[current] && data.reason === 'primary-action') {
+        target = LIST_FORM[current];
+      }
+      if (!target) { console.warn('[auto-mock] unmapped nav', data); return; }
+      var openNew = !!(data.openInNewTab || data.reason === 'ctx-open-new');
+      // App icon opens in current tab (live desk replaces Apps); explicit new-tab keeps both
+      show(target, true, { openInNewTab: openNew, title: data.title || titleFor(target) });
+    }
+  });
+
+  window.addEventListener('popstate', function(ev){
+    var route = (ev.state && ev.state.route) || (location.hash || '').replace(/^#/, '') || START;
+    if (ev.state && ev.state.tabId) activeTabId = ev.state.tabId;
+    show(route, false, { force: true });
+  });
+
+  window.addEventListener('keydown', function(e){
+    if (e.ctrlKey && e.altKey && (e.key === 't' || e.key === 'T')) {
+      e.preventDefault();
+      show(APPS_ROUTE, true, { openInNewTab: true, title: 'Apps' });
+    }
+  });
+
+  window.__UNIFIED_SHOW__ = show;
+  window.__UNIFIED_ROUTES__ = ROUTE_NAMES;
+  window.__UNIFIED_RESOLVE__ = resolveName;
+  window.__UNIFIED_CLOSE_TAB__ = closeTab;
+  Object.defineProperty(window, '__UNIFIED_FRAME__', { get: function(){ return activeFrame; } });
+
+  var initial = (location.hash || '').replace(/^#/, '') || START;
+  tabs[0].route = resolveName(initial) || START;
+  tabs[0].title = titleFor(tabs[0].route);
+  tabs[0].home = tabs[0].route === START;
+  show(initial, false, { force: true });
+})();
+</script>
+</body>
+</html>
