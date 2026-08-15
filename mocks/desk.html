@@ -478,12 +478,14 @@
       var nodes = list.querySelectorAll('.sidebar-item-container');
       var donor = null;
       var besideEl = null;
+      var afterEl = null;
       var myHr = null;
       for (var n = 0; n < nodes.length; n++){
         if (nodes[n].querySelector && nodes[n].querySelector('.header-title')) continue;
         var name = labelOf(nodes[n]);
         if (!donor) donor = nodes[n];
         if (item.beside && name.toLowerCase().indexOf(String(item.beside).toLowerCase()) >= 0) besideEl = nodes[n];
+        if ((name === 'Employees' || name === 'Payroll') && !afterEl) afterEl = nodes[n];
         if (name === 'My HR' || name === 'Add Sidebar Item') myHr = myHr || nodes[n];
       }
       var node;
@@ -520,13 +522,31 @@
       if (besideEl && besideEl.parentNode === list){
         if (besideEl.nextSibling) list.insertBefore(node, besideEl.nextSibling);
         else list.appendChild(node);
+      } else if (afterEl && afterEl.parentNode === list){
+        if (afterEl.nextSibling) list.insertBefore(node, afterEl.nextSibling);
+        else list.appendChild(node);
       } else if (myHr && myHr.parentNode === list){
         list.insertBefore(node, myHr);
       } else {
         list.appendChild(node);
       }
     }
+    try {
+      if (!doc.getElementById('am-session-nav-style')) {
+        var st = doc.createElement('style');
+        st.id = 'am-session-nav-style';
+        st.textContent = '[data-am-session-nav],[data-am-session-nav] a{cursor:pointer!important}';
+        (doc.head || doc.documentElement).appendChild(st);
+      }
+    } catch (e) {}
     bindSessionClicks(doc);
+  }
+  function syncParentHash(route){
+    if (!route || !window.parent || window.parent === window) return;
+    try {
+      var loc = window.parent.location;
+      window.parent.history.replaceState(window.parent.history.state, '', loc.pathname + loc.search + '#' + route);
+    } catch (e) {}
   }
   /*am-session-nav-end*/
 
