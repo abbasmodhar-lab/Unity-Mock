@@ -14,7 +14,8 @@
   var frame = document.getElementById('am-session-frame');
   function sync(){
     var h = (location.hash || '').replace(/^#/, '') || "salary";
-    frame.src = 'desk.html#' + h;
+    var q = location.search || '';
+    frame.src = 'desk.html' + q + '#' + h;
   }
   window.addEventListener('hashchange', sync);
   sync();
