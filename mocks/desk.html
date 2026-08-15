@@ -460,7 +460,10 @@
     if (!list) return;
     var items = SESSION_NAV || [];
     function labelOf(el){
-      return String((el && el.getAttribute && el.getAttribute('item-name')) || '');
+      var name = String((el && el.getAttribute && el.getAttribute('item-name')) || '').trim();
+      if (name) return name;
+      var lab = el && el.querySelector && el.querySelector('.sidebar-item-label');
+      return String((lab && lab.textContent) || '').trim();
     }
     var extras = list.querySelectorAll('[data-am-session-nav]');
     for (var x = 0; x < extras.length; x++){
@@ -474,7 +477,6 @@
     for (var i = 0; i < items.length; i++){
       var item = items[i] || {};
       if (!item.slug) continue;
-      if (list.querySelector('[data-am-session-nav="' + item.slug + '"]')) continue;
       var nodes = list.querySelectorAll('.sidebar-item-container');
       var donor = null;
       var besideEl = null;
@@ -487,6 +489,16 @@
         if (item.beside && name.toLowerCase().indexOf(String(item.beside).toLowerCase()) >= 0) besideEl = nodes[n];
         if ((name === 'Employees' || name === 'Payroll') && !afterEl) afterEl = nodes[n];
         if (name === 'My HR' || name === 'Add Sidebar Item') myHr = myHr || nodes[n];
+      }
+      var existing = list.querySelector('[data-am-session-nav="' + item.slug + '"]');
+      if (existing){
+        var dest = besideEl || afterEl || myHr;
+        if (dest && dest !== existing){
+          if (dest === myHr) list.insertBefore(existing, myHr);
+          else if (dest.nextSibling) list.insertBefore(existing, dest.nextSibling);
+          else list.appendChild(existing);
+        }
+        continue;
       }
       var node;
       if (donor){
@@ -541,6 +553,35 @@
     } catch (e) {}
     bindSessionClicks(doc);
   }
+  function applySessionScreen(doc, route){
+    if (!doc || !route) return;
+    var items = SESSION_NAV || [];
+    var title = '';
+    for (var s = 0; s < items.length; s++){
+      if (items[s] && items[s].slug === route){
+        title = items[s].title || items[s].slug;
+        break;
+      }
+    }
+    if (!title) return;
+    try { doc.title = title; } catch (e) {}
+    var heading = doc.querySelector('.title-text');
+    if (heading) heading.textContent = title;
+    var h1 = doc.querySelector('h1');
+    if (h1) h1.textContent = title;
+    var banner = doc.querySelector('[data-am-session-screen]');
+    if (!banner){
+      banner = doc.createElement('div');
+      banner.setAttribute('data-am-session-screen', '1');
+      banner.setAttribute('style', 'padding:12px 20px;font-size:20px;font-weight:600');
+      banner.textContent = title;
+      var head = doc.querySelector('.page-head');
+      if (head) head.insertBefore(banner, head.firstChild);
+      else if (doc.body) doc.body.insertBefore(banner, doc.body.firstChild);
+    } else {
+      banner.textContent = title;
+    }
+  }
   function syncParentHash(route){
     if (!route || !window.parent || window.parent === window) return;
     try {
@@ -552,6 +593,7 @@
 
   function revealRoute(route){
     try { applySessionNav(activeFrame.contentDocument); } catch (e) {}
+    try { applySessionScreen(activeFrame.contentDocument, route); } catch (e) {}
     current = route;
     window.__UNIFIED_READY__ = true;
     window.__UNIFIED_ROUTE__ = route;
