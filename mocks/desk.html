@@ -100,6 +100,7 @@
   var LIST_FORM = {"sales-invoice": "sales-invoice-form", "sales-invoice-list": "sales-invoice-form", "customer": "customer-form", "item": "item-form", "payment-entry": "payment-entry-form"};
   var ROUTE_NAMES = ["apps", "hr", "hr-employees", "hr-employee-lifecycle", "hr-leave-applications", "hr-leave-approvals", "hr-attendance", "hr-shifts-check-ins", "hr-recruitment", "hr-performance", "hr-payroll", "hr-payroll-run", "hr-payroll-register", "hr-my-hr", "salary"];
   var DESK_PATHS = {"apps": "/desk", "hr": "/desk/hr", "hr-employees": "/desk/hr-employees", "hr-employee-lifecycle": "/desk/hr-employee-lifecycle", "hr-leave-applications": "/desk/hr-leave-applications", "hr-leave-approvals": "/desk/hr-leave-approvals", "hr-attendance": "/desk/hr-attendance", "hr-shifts-check-ins": "/desk/hr-shifts-check-ins", "hr-recruitment": "/desk/hr-recruitment", "hr-performance": "/desk/hr-performance", "hr-payroll": "/desk/hr-payroll", "hr-payroll-run": "/desk/hr-payroll-run", "hr-payroll-register": "/desk/hr-payroll-register", "hr-my-hr": "/desk/hr-my-hr"};
+  var SESSION_NAV = [{"slug": "salary", "title": "Salary", "beside": "expenses"}];
   var FILE_MAP = {"apps": "routes/apps.html", "hr": "routes/hr.html", "hr-employees": "routes/hr-employees.html", "hr-employee-lifecycle": "routes/hr-employee-lifecycle.html", "hr-leave-applications": "routes/hr-leave-applications.html", "hr-leave-approvals": "routes/hr-leave-approvals.html", "hr-attendance": "routes/hr-attendance.html", "hr-shifts-check-ins": "routes/hr-shifts-check-ins.html", "hr-recruitment": "routes/hr-recruitment.html", "hr-performance": "routes/hr-performance.html", "hr-payroll": "routes/hr-payroll.html", "hr-payroll-run": "routes/hr-payroll-run.html", "hr-payroll-register": "routes/hr-payroll-register.html", "hr-my-hr": "routes/hr-my-hr.html", "salary": "routes/salary.html"};
   var START = "hr";
   // New-tab / close-last always land on Apps when the bundle includes it — never the
@@ -409,6 +410,7 @@
         settled = true;
         frameRoute[frameKey(fr)] = route;
         try { applyThemeToFrame(fr, window.__UNIFIED_THEME__ || 'system'); } catch (e) {}
+        try { applySessionNav(fr.contentDocument); } catch (e) {}
         resolve();
       };
       fr.onload = function(){ finish(false); };
@@ -433,7 +435,85 @@
     });
   }
 
+  
+  /*am-session-nav*/
+  function applySessionNav(doc){
+    if (!doc) return;
+    var list = doc.querySelector('.body-sidebar .sidebar-items') || doc.querySelector('.sidebar-items');
+    if (!list) return;
+    var items = SESSION_NAV || [];
+    function labelOf(el){
+      return String((el && el.getAttribute && el.getAttribute('item-name')) || '');
+    }
+    var extras = list.querySelectorAll('[data-am-session-nav]');
+    for (var x = 0; x < extras.length; x++){
+      var slug = extras[x].getAttribute('data-am-session-nav');
+      var keep = false;
+      for (var k = 0; k < items.length; k++){
+        if (items[k] && items[k].slug === slug) { keep = true; break; }
+      }
+      if (!keep && extras[x].parentNode) extras[x].parentNode.removeChild(extras[x]);
+    }
+    for (var i = 0; i < items.length; i++){
+      var item = items[i] || {};
+      if (!item.slug) continue;
+      if (list.querySelector('[data-am-session-nav="' + item.slug + '"]')) continue;
+      var nodes = list.querySelectorAll('.sidebar-item-container');
+      var donor = null;
+      var besideEl = null;
+      var myHr = null;
+      for (var n = 0; n < nodes.length; n++){
+        if (nodes[n].querySelector && nodes[n].querySelector('.header-title')) continue;
+        var name = labelOf(nodes[n]);
+        if (!donor) donor = nodes[n];
+        if (item.beside && name.toLowerCase().indexOf(String(item.beside).toLowerCase()) >= 0) besideEl = nodes[n];
+        if (name === 'My HR' || name === 'Add Sidebar Item') myHr = myHr || nodes[n];
+      }
+      var node;
+      if (donor){
+        node = donor.cloneNode(true);
+        node.setAttribute('item-name', item.title || item.slug);
+        node.setAttribute('data-id', item.title || item.slug);
+        node.setAttribute('title', item.title || item.slug);
+        node.setAttribute('data-am-session-nav', item.slug);
+        var act = node.querySelector('.active-sidebar');
+        if (act) act.classList.remove('active-sidebar');
+        node.classList.remove('active-sidebar');
+        var lab = node.querySelector('.sidebar-item-label');
+        if (lab && String(lab.className || '').indexOf('header-title') < 0) lab.textContent = item.title || item.slug;
+        var a = node.querySelector('a.item-anchor, a');
+        if (a){
+          a.setAttribute('href', '#' + item.slug);
+          a.setAttribute('data-original-href', '/desk/' + item.slug);
+        }
+      } else {
+        node = doc.createElement('div');
+        node.className = 'sidebar-item-container';
+        node.setAttribute('item-name', item.title || item.slug);
+        node.setAttribute('data-am-session-nav', item.slug);
+        var link = doc.createElement('a');
+        link.setAttribute('href', '#' + item.slug);
+        link.className = 'item-anchor';
+        var span = doc.createElement('span');
+        span.className = 'sidebar-item-label';
+        span.textContent = item.title || item.slug;
+        link.appendChild(span);
+        node.appendChild(link);
+      }
+      if (besideEl && besideEl.parentNode === list){
+        if (besideEl.nextSibling) list.insertBefore(node, besideEl.nextSibling);
+        else list.appendChild(node);
+      } else if (myHr && myHr.parentNode === list){
+        list.insertBefore(node, myHr);
+      } else {
+        list.appendChild(node);
+      }
+    }
+  }
+  /*am-session-nav-end*/
+
   function revealRoute(route){
+    try { applySessionNav(activeFrame.contentDocument); } catch (e) {}
     current = route;
     window.__UNIFIED_READY__ = true;
     window.__UNIFIED_ROUTE__ = route;
