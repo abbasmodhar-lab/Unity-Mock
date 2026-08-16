@@ -13,7 +13,7 @@
 (function(){
   var frame = document.getElementById('am-session-frame');
   function sync(){
-    var h = (location.hash || '').replace(/^#/, '') || "payroll-entry";
+    var h = (location.hash || '').replace(/^#/, '') || "expense-claim";
     var q = location.search || '';
     frame.src = 'desk.html' + q + '#' + h;
   }
