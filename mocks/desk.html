@@ -1,0 +1,166 @@
+<!DOCTYPE html><html><body>
+<script>
+var SESSION_NAV = [{"slug": "salary", "title": "Salary", "beside": ""}];
+  var FILE_MAP = {"apps": "routes/apps.html", "hr": "routes/hr.html", "salary": "routes/salary.html"};
+var ROUTE_NAMES = ["apps", "hr", "salary"];
+var TITLE_MAP = {
+    'salary': "Salary", apps: 'Apps', hr: 'HR' };
+
+  /*am-session-nav*/
+  function bindSessionClicks(doc){
+    var win = doc.defaultView;
+    if (!win || win.__amSessionNavBound) return;
+    win.__amSessionNavBound = true;
+    win.addEventListener('click', function(e){
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var el = t.closest('[data-am-session-nav]');
+      if (!el) return;
+      var slug = el.getAttribute('data-am-session-nav');
+      if (!slug) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (typeof show === 'function') show(slug, true);
+    }, true);
+  }
+  function applySessionNav(doc){
+    if (!doc) return;
+    var list = doc.querySelector('.body-sidebar .sidebar-items') || doc.querySelector('.sidebar-items');
+    if (!list) return;
+    var items = SESSION_NAV || [];
+    function labelOf(el){
+      var name = String((el && el.getAttribute && el.getAttribute('item-name')) || '').trim();
+      if (name) return name;
+      var lab = el && el.querySelector && el.querySelector('.sidebar-item-label');
+      return String((lab && lab.textContent) || '').trim();
+    }
+    var extras = list.querySelectorAll('[data-am-session-nav]');
+    for (var x = 0; x < extras.length; x++){
+      var slug = extras[x].getAttribute('data-am-session-nav');
+      var keep = false;
+      for (var k = 0; k < items.length; k++){
+        if (items[k] && items[k].slug === slug) { keep = true; break; }
+      }
+      if (!keep && extras[x].parentNode) extras[x].parentNode.removeChild(extras[x]);
+    }
+    for (var i = 0; i < items.length; i++){
+      var item = items[i] || {};
+      if (!item.slug) continue;
+      var nodes = list.querySelectorAll('.sidebar-item-container');
+      var donor = null;
+      var besideEl = null;
+      var afterEl = null;
+      var myHr = null;
+      for (var n = 0; n < nodes.length; n++){
+        if (nodes[n].querySelector && nodes[n].querySelector('.header-title')) continue;
+        var name = labelOf(nodes[n]);
+        if (!donor) donor = nodes[n];
+        if (item.beside && name.toLowerCase().indexOf(String(item.beside).toLowerCase()) >= 0) besideEl = nodes[n];
+        if ((name === 'Employees' || name === 'Payroll') && !afterEl) afterEl = nodes[n];
+        if (name === 'My HR' || name === 'Add Sidebar Item') myHr = myHr || nodes[n];
+      }
+      var existing = list.querySelector('[data-am-session-nav="' + item.slug + '"]');
+      if (existing){
+        var dest = besideEl || afterEl || myHr;
+        if (dest && dest !== existing){
+          if (dest === myHr) list.insertBefore(existing, myHr);
+          else if (dest.nextSibling) list.insertBefore(existing, dest.nextSibling);
+          else list.appendChild(existing);
+        }
+        continue;
+      }
+      /* the page's own static sidebar already links this route — do not add a twin */
+      if (list.querySelector('a[href="#' + item.slug + '"]')) continue;
+      var node;
+      if (donor){
+        node = donor.cloneNode(true);
+        node.setAttribute('item-name', item.title || item.slug);
+        node.setAttribute('data-id', item.title || item.slug);
+        node.setAttribute('title', item.title || item.slug);
+        node.setAttribute('data-am-session-nav', item.slug);
+        var act = node.querySelector('.active-sidebar');
+        if (act) act.classList.remove('active-sidebar');
+        node.classList.remove('active-sidebar');
+        var lab = node.querySelector('.sidebar-item-label');
+        if (lab && String(lab.className || '').indexOf('header-title') < 0) lab.textContent = item.title || item.slug;
+        var a = node.querySelector('a.item-anchor, a');
+        if (a){
+          a.setAttribute('href', '#' + item.slug);
+          a.setAttribute('data-original-href', '/desk/' + item.slug);
+        }
+      } else {
+        node = doc.createElement('div');
+        node.className = 'sidebar-item-container';
+        node.setAttribute('item-name', item.title || item.slug);
+        node.setAttribute('data-am-session-nav', item.slug);
+        var link = doc.createElement('a');
+        link.setAttribute('href', '#' + item.slug);
+        link.className = 'item-anchor';
+        var span = doc.createElement('span');
+        span.className = 'sidebar-item-label';
+        span.textContent = item.title || item.slug;
+        link.appendChild(span);
+        node.appendChild(link);
+      }
+      if (besideEl && besideEl.parentNode === list){
+        if (besideEl.nextSibling) list.insertBefore(node, besideEl.nextSibling);
+        else list.appendChild(node);
+      } else if (afterEl && afterEl.parentNode === list){
+        if (afterEl.nextSibling) list.insertBefore(node, afterEl.nextSibling);
+        else list.appendChild(node);
+      } else if (myHr && myHr.parentNode === list){
+        list.insertBefore(node, myHr);
+      } else {
+        list.appendChild(node);
+      }
+    }
+    try {
+      if (!doc.getElementById('am-session-nav-style')) {
+        var st = doc.createElement('style');
+        st.id = 'am-session-nav-style';
+        st.textContent = '[data-am-session-nav],[data-am-session-nav] a{cursor:pointer!important}';
+        (doc.head || doc.documentElement).appendChild(st);
+      }
+    } catch (e) {}
+    bindSessionClicks(doc);
+  }
+  function applySessionScreen(doc, route){
+    if (!doc || !route) return;
+    var items = SESSION_NAV || [];
+    var title = '';
+    for (var s = 0; s < items.length; s++){
+      if (items[s] && items[s].slug === route){
+        title = items[s].title || items[s].slug;
+        break;
+      }
+    }
+    if (!title) return;
+    try { doc.title = title; } catch (e) {}
+    var heading = doc.querySelector('.title-text');
+    if (heading) heading.textContent = title;
+    var h1 = doc.querySelector('h1');
+    if (h1) h1.textContent = title;
+    var banner = doc.querySelector('[data-am-session-screen]');
+    if (!banner){
+      banner = doc.createElement('div');
+      banner.setAttribute('data-am-session-screen', '1');
+      banner.setAttribute('style', 'padding:12px 20px;font-size:20px;font-weight:600');
+      banner.textContent = title;
+      var head = doc.querySelector('.page-head');
+      if (head) head.insertBefore(banner, head.firstChild);
+      else if (doc.body) doc.body.insertBefore(banner, doc.body.firstChild);
+    } else {
+      banner.textContent = title;
+    }
+  }
+  function syncParentHash(route){
+    if (!route || !window.parent || window.parent === window) return;
+    try {
+      var loc = window.parent.location;
+      window.parent.history.replaceState(window.parent.history.state, '', loc.pathname + loc.search + '#' + route);
+    } catch (e) {}
+  }
+  /*am-session-nav-end*/
+
+</script></body></html>
